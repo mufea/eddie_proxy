@@ -18,6 +18,8 @@ const API_KEYS = {
   deepseek: process.env.DEEPSEEK_API_KEY || '',
   anthropic: process.env.ANTHROPIC_API_KEY || '',
   xai: process.env.XAI_API_KEY || '',
+  stability: process.env.STABILITY_API_KEY || '',
+  fal: process.env.FAL_API_KEY || '',
   gemini: process.env.GEMINI_API_KEY || ''
 };
 
@@ -28,13 +30,19 @@ function getKeyForModel(modelName = '') {
     return API_KEYS.openai;
   }
   if (name.includes('deepseek')) {
-    return API_KEYS.deepseek || API_KEYS.openai;
+    return API_KEYS.deepseek;
   }
   if (name.includes('claude') || name.includes('anthropic') || name.includes('sonnet') || name.includes('opus')) {
     return API_KEYS.anthropic;
   }
   if (name.includes('grok') || name.includes('xai')) {
     return API_KEYS.xai;
+  }
+  if (name.includes('stability')) {
+    return API_KEYS.stability;
+  }
+  if (name.includes('fal')) {
+    return API_KEYS.fal;
   }
   if (name.includes('gemini') || name.includes('google')) {
     return API_KEYS.gemini;
@@ -73,6 +81,8 @@ app.get('/api/keys', (req, res) => {
       deepseek: API_KEYS.deepseek,
       anthropic: API_KEYS.anthropic,
       xai: API_KEYS.xai,
+      stability: API_KEYS.stability,
+      fal: API_KEYS.fal,
       gemini: API_KEYS.gemini
     }
   });
