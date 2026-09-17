@@ -156,8 +156,8 @@ app.post('/api/chat', async (req, res) => {
     // B. JIKA MODEL ANTHROPIC CLAUDE
     if (modelName.includes('claude') || modelName.includes('sonnet') || modelName.includes('opus')) {
       const claudeModel = modelName.includes('opus')
-        ? 'claude-3-opus-20240229'
-        : 'claude-3-5-sonnet-20241022';
+        ? 'claude-opus-5'
+        : 'claude-sonnet-5';
 
       const userMessages = chatMessages.filter(m => m.role !== 'system');
       const systemMessage = chatMessages.find(m => m.role === 'system')?.content;
