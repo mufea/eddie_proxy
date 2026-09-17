@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,191 +9,196 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================================================
-// KONFIGURASI API KEYS DARI ENVIRONMENT VARIABLES
-// Atur variabel-variabel ini di Dashboard Render -> Environment
+// 1. API KEYS (Diatur di Dashboard Render -> Environment Variables)
 // ============================================================================
 const API_KEYS = {
   openai: process.env.OPENAI_API_KEY || '',
   deepseek: process.env.DEEPSEEK_API_KEY || '',
   anthropic: process.env.ANTHROPIC_API_KEY || '',
   xai: process.env.XAI_API_KEY || '',
-  stability: process.env.STABILITY_API_KEY || '',
-  fal: process.env.FAL_API_KEY || '',
   gemini: process.env.GEMINI_API_KEY || ''
 };
 
-// Helper: memetakan model ID ke API key yang sesuai
-function getKeyForModel(modelName = '') {
-  const name = modelName.toLowerCase();
-  if (name.includes('gpt') || name.includes('openai')) {
-    return API_KEYS.openai;
+// ============================================================================
+// 2. DYNAMIC MODEL MAPPING
+// Jika ada rilis model versi baru, Anda cukup update nilai di bawah ini
+// ATAU set Environment Variable di Render tanpa menyentuh kode sama sekali!
+// ============================================================================
+const MODEL_MAPPING = {
+  // --- OPENAI ---
+  'gpt': {
+    provider: 'openai',
+    targetModel: process.env.MODEL_OPENAI_FLAGSHIP || 'gpt-5-nano-2025-08-07', // Ubah ke gpt-5 bila sudah rilis
+    getKey: () => API_KEYS.openai
+  },
+  'gpt-mini': {
+    provider: 'openai',
+    targetModel: process.env.MODEL_OPENAI_MINI || 'gpt-5-mini-2025-08-07',
+    getKey: () => API_KEYS.openai
+  },
+
+  // --- ANTHROPIC CLAUDE ---
+  'claude-sonet': {
+    provider: 'anthropic',
+    targetModel: process.env.MODEL_CLAUDE_SONNET || 'claude-4-6-sonnet', // Update ke sonnet terbaru
+    getKey: () => API_KEYS.anthropic
+  },
+  'claude-opus': {
+    provider: 'anthropic',
+    targetModel: process.env.MODEL_CLAUDE_OPUS || 'claude-4-7-opus', // Update ke opus terbaru
+    getKey: () => API_KEYS.anthropic
+  },
+
+  // --- DEEPSEEK ---
+  'deepseek': {
+    provider: 'deepseek',
+    targetModel: process.env.MODEL_DEEPSEEK || 'deepseek-chat', // Update ke deepseek-v3 / deepseek-r1
+    getKey: () => API_KEYS.deepseek
+  },
+
+  // --- XAI (GROK) ---
+  'grok': {
+    provider: 'xai',
+    targetModel: process.env.MODEL_GROK || 'grok-3', // Update ke grok-2 / grok-3
+    getKey: () => API_KEYS.xai
+  },
+
+  // --- GOOGLE GEMINI ---
+  'gemini': {
+    provider: 'gemini',
+    targetModel: process.env.MODEL_GEMINI || 'gemini-2.5-flash',
+    getKey: () => API_KEYS.gemini
   }
-  if (name.includes('deepseek')) {
-    return API_KEYS.deepseek;
+};
+
+// Helper: Menemukan konfigurasi model berdasarkan parameter dari Android
+function resolveModelConfig(clientModelId = '') {
+  const query = clientModelId.toLowerCase().trim();
+
+  // 1. Exact match
+  if (MODEL_MAPPING[query]) {
+    const item = MODEL_MAPPING[query];
+    return {
+      clientModel: query,
+      provider: item.provider,
+      targetModel: item.targetModel,
+      apiKey: item.getKey()
+    };
   }
-  if (name.includes('claude') || name.includes('anthropic') || name.includes('sonnet') || name.includes('opus')) {
-    return API_KEYS.anthropic;
+
+  // 2. Fuzzy / Keyword match
+  if (query.includes('opus')) {
+    return {
+      clientModel: query,
+      provider: 'anthropic',
+      targetModel: MODEL_MAPPING['claude-opus'].targetModel,
+      apiKey: API_KEYS.anthropic
+    };
   }
-  if (name.includes('grok') || name.includes('xai')) {
-    return API_KEYS.xai;
+  if (query.includes('claude') || query.includes('sonet') || query.includes('sonnet')) {
+    return {
+      clientModel: query,
+      provider: 'anthropic',
+      targetModel: MODEL_MAPPING['claude-sonet'].targetModel,
+      apiKey: API_KEYS.anthropic
+    };
   }
-  if (name.includes('stability')) {
-    return API_KEYS.stability;
+  if (query.includes('mini')) {
+    return {
+      clientModel: query,
+      provider: 'openai',
+      targetModel: MODEL_MAPPING['gpt-mini'].targetModel,
+      apiKey: API_KEYS.openai
+    };
   }
-  if (name.includes('fal')) {
-    return API_KEYS.fal;
+  if (query.includes('gpt')) {
+    return {
+      clientModel: query,
+      provider: 'openai',
+      targetModel: MODEL_MAPPING['gpt'].targetModel,
+      apiKey: API_KEYS.openai
+    };
   }
-  if (name.includes('gemini') || name.includes('google')) {
-    return API_KEYS.gemini;
+  if (query.includes('deepseek')) {
+    return {
+      clientModel: query,
+      provider: 'deepseek',
+      targetModel: MODEL_MAPPING['deepseek'].targetModel,
+      apiKey: API_KEYS.deepseek
+    };
   }
-  return API_KEYS.openai; // fallback default
+  if (query.includes('grok')) {
+    return {
+      clientModel: query,
+      provider: 'xai',
+      targetModel: MODEL_MAPPING['grok'].targetModel,
+      apiKey: API_KEYS.xai
+    };
+  }
+
+  // Default fallback
+  return {
+    clientModel: query,
+    provider: 'openai',
+    targetModel: MODEL_MAPPING['gpt'].targetModel,
+    apiKey: API_KEYS.openai
+  };
 }
 
 // ============================================================================
-// 1. HEALTH CHECK / ROOT
+// 3. ENDPOINT API UNTUK APLIKASI ANDROID
 // ============================================================================
+
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
-    service: 'Eddie AI Proxy',
+    service: 'Eddie AI Dynamic Proxy',
     timestamp: new Date().toISOString()
   });
 });
 
-// ============================================================================
-// 2. ENDPOINT PENGAMBILAN API KEYS (Dipanggil oleh Android App)
-// ============================================================================
-
-// Contoh: GET /api/keys?model=gpt-5.5
+// Endpoint Utama: GET /api/keys?model={modelId}
+// Contoh: /api/keys?model=claude-sonet-5
 app.get('/api/keys', (req, res) => {
-  const model = (req.query.model || req.query.name || '').toString();
-  const requestedKey = getKeyForModel(model);
+  const modelQuery = (req.query.model || req.query.name || 'gpt').toString();
+  const resolved = resolveModelConfig(modelQuery);
 
   res.json({
     success: true,
-    model: model || 'default',
-    apiKey: requestedKey,
-    key: requestedKey,
-    // Mengembalikan semua key jika client meminta bundle
-    keys: {
-      openai: API_KEYS.openai,
-      deepseek: API_KEYS.deepseek,
-      anthropic: API_KEYS.anthropic,
-      xai: API_KEYS.xai,
-      stability: API_KEYS.stability,
-      fal: API_KEYS.fal,
-      gemini: API_KEYS.gemini
-    }
+    clientModel: resolved.clientModel,
+    provider: resolved.provider,
+    targetModel: resolved.targetModel, // <--- Ini ID model resmi (gpt-4o, claude-3-7-..., dll.)
+    modelId: resolved.targetModel,
+    apiKey: resolved.apiKey,
+    key: resolved.apiKey
   });
 });
 
-// Contoh: GET /api/key/gpt-5.5 atau GET /api/key/openai
+// Endpoint Alternatif: GET /api/key/:model
 app.get('/api/key/:model', (req, res) => {
-  const model = req.params.model || '';
-  const key = getKeyForModel(model);
-
+  const resolved = resolveModelConfig(req.params.model);
   res.json({
     success: true,
-    model: model,
-    apiKey: key,
-    key: key
+    clientModel: resolved.clientModel,
+    provider: resolved.provider,
+    targetModel: resolved.targetModel,
+    modelId: resolved.targetModel,
+    apiKey: resolved.apiKey,
+    key: resolved.apiKey
   });
 });
 
-// ============================================================================
-// 3. ENDPOINT PROXY CHAT (Opsional: Hit langsung lewat server proxy)
-// POST /api/chat
-// ============================================================================
-app.post('/api/chat', async (req, res) => {
-  try {
-    const { model, messages, message, apiKey } = req.body;
-    const modelName = (model || 'gpt-5.5').toLowerCase();
-    const effectiveKey = apiKey || getKeyForModel(modelName);
+// Endpoint Sinkronisasi: GET /api/models
+app.get('/api/models', (req, res) => {
+  const models = Object.keys(MODEL_MAPPING).map(key => ({
+    id: key,
+    provider: MODEL_MAPPING[key].provider,
+    targetModel: MODEL_MAPPING[key].targetModel
+  }));
 
-    // Siapkan list pesan
-    let chatMessages = messages;
-    if (!chatMessages || !Array.isArray(chatMessages)) {
-      chatMessages = [{ role: 'user', content: message || 'Halo' }];
-    }
-
-    // A. JIKA MODEL OPENAI / DEEPSEEK / GROK (Format OpenAI Compatible)
-    if (
-      modelName.includes('gpt') ||
-      modelName.includes('deepseek') ||
-      modelName.includes('grok')
-    ) {
-      let targetUrl = 'https://api.openai.com/v1/chat/completions';
-      let actualModelId = 'gpt-4o'; // atau gpt-4o-mini untuk gpt-5.5-mini
-
-      if (modelName.includes('mini')) actualModelId = 'gpt-4o-mini';
-      if (modelName.includes('deepseek')) {
-        targetUrl = 'https://api.deepseek.com/chat/completions';
-        actualModelId = 'deepseek-chat';
-      }
-      if (modelName.includes('grok')) {
-        targetUrl = 'https://api.x.ai/v1/chat/completions';
-        actualModelId = 'grok-beta';
-      }
-
-      const openAiResponse = await fetch(targetUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${effectiveKey}`
-        },
-        body: JSON.stringify({
-          model: actualModelId,
-          messages: chatMessages,
-          temperature: 0.7
-        })
-      });
-
-      const data = await openAiResponse.json();
-      return res.status(openAiResponse.status).json(data);
-    }
-
-    // B. JIKA MODEL ANTHROPIC CLAUDE
-    if (modelName.includes('claude') || modelName.includes('sonnet') || modelName.includes('opus')) {
-      const claudeModel = modelName.includes('opus')
-        ? 'claude-opus-5'
-        : 'claude-sonnet-5';
-
-      const userMessages = chatMessages.filter(m => m.role !== 'system');
-      const systemMessage = chatMessages.find(m => m.role === 'system')?.content;
-
-      const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': effectiveKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: claudeModel,
-          max_tokens: 2048,
-          messages: userMessages,
-          ...(systemMessage ? { system: systemMessage } : {})
-        })
-      });
-
-      const data = await anthropicRes.json();
-      return res.status(anthropicRes.status).json(data);
-    }
-
-    // Fallback error
-    return res.status(400).json({
-      error: `Model ${model} tidak dikenali atau belum dikonfigurasi.`
-    });
-
-  } catch (error) {
-    console.error('Error handling chat request:', error);
-    res.status(500).json({ error: error.message || 'Internal Server Error' });
-  }
+  res.json({ success: true, models });
 });
 
-// ============================================================================
-// START SERVER
-// ============================================================================
 app.listen(PORT, () => {
-  console.log(`Server proxy AI berjalan di port ${PORT}`);
+  console.log(`Eddie AI Dynamic Proxy running on port ${PORT}`);
 });
