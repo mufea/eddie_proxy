@@ -16,7 +16,9 @@ function getApiKeys() {
     openai: process.env.OPENAI_API_KEY || '',
     deepseek: process.env.DEEPSEEK_API_KEY || '',
     anthropic: process.env.ANTHROPIC_API_KEY || '',
-    xai: process.env.XAI_API_KEY || ''
+    xai: process.env.XAI_API_KEY || '',
+    stability: process.env.STABILITY_API_KEY || '',
+    fal: process.env.FAL_API_KEY || ''
   };
 }
 
