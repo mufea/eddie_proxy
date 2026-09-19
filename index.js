@@ -69,7 +69,20 @@ function getModelRegistry() {
       provider: 'xai',
       targetModel: process.env.XAI_MODEL_GROK || 'grok-beta',
       apiKey: keys.xai
+    },
+
+    // --- STABILITY ---
+    'stability': {
+      provider: 'stability',
+      apiKey: keys.stability
+    },
+
+    // --- FAL ---
+    'grok': {
+      provider: 'fal',
+      apiKey: keys.fal
     }
+    
   };
 }
 
