@@ -78,7 +78,7 @@ function getModelRegistry() {
     },
 
     // --- FAL ---
-    'grok': {
+    'fal': {
       provider: 'fal',
       apiKey: keys.fal
     }
@@ -123,7 +123,13 @@ function resolveModel(query = '') {
   if (cleanId.includes('grok')) {
     return { clientModel: cleanId, provider: 'xai', targetModel: registry['grok'].targetModel, apiKey: registry['grok'].apiKey };
   }
-
+  if (cleanId.includes('stability')) {
+    return { clientModel: cleanId, provider: 'stability', targetModel: registry['stability'].targetModel, apiKey: registry['stability'].apiKey };
+  }
+  if (cleanId.includes('fal')) {
+    return { clientModel: cleanId, provider: 'fal', targetModel: registry['fal'].targetModel, apiKey: registry['fal'].apiKey };
+  }
+  
   // Default fallback jika tidak dikenali sama sekali -> GPT
   return {
     clientModel: cleanId || 'gpt',
